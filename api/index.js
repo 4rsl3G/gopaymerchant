@@ -79,9 +79,12 @@ app.use(cors({ origin: true, credentials: false }));
 app.use(express.json({ limit: "300kb" }));
 app.use(express.urlencoded({ extended: true }));
 
-app.set("views", path.join(process.cwd(), "views"));
+// IMPORTANT: On Vercel, bundle-safe paths must live under /api
+const ROOT = __dirname; // /var/task/api in Vercel
+
+app.set("views", path.join(ROOT, "views"));
 app.set("view engine", "ejs");
-app.use("/public", express.static(path.join(process.cwd(), "public")));
+app.use("/public", express.static(path.join(ROOT, "public")));
 
 // Rate limit (public)
 const publicLimiter = rateLimit({
