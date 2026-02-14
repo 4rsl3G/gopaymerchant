@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>API Explorer</title>
+  <link rel="stylesheet" href="/public/app.css"/>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="brand">
+      <div class="logo">G</div>
+      <div class="brandText">
+        <div class="brandTitle">GoBiz Proxy</div>
+        <div class="brandSub">API Explorer (Live)</div>
+      </div>
+    </div>
+
+    <div class="sideSection">
+      <div class="sideTitle">Navigation</div>
+      <div class="sideBtns">
+        <a class="btn ghost" href="/">Home</a>
+        <button class="btn danger" id="btnReset">Reset LocalStorage</button>
+      </div>
+    </div>
+
+    <div class="sideSection">
+      <div class="sideTitle">Endpoints</div>
+      <div class="nav">
+        <button class="navItem active" data-key="otpRequest"><span class="pill post">POST</span><span>/api/otp/request</span></button>
+        <button class="navItem" data-key="otpVerify"><span class="pill post">POST</span><span>/api/otp/verify</span></button>
+        <button class="navItem" data-key="merchant"><span class="pill post">POST</span><span>/api/merchant/search</span></button>
+        <button class="navItem" data-key="mutasi"><span class="pill post">POST</span><span>/api/mutasi</span></button>
+        <button class="navItem" data-key="proxy"><span class="pill post">POST</span><span>/api/proxy</span></button>
+      </div>
+    </div>
+
+    <div class="sideSection">
+      <div class="sideTitle">Local State</div>
+      <div class="kv"><div class="k">uniqueId</div><div class="v mono" id="kvUid">-</div></div>
+      <div class="kv"><div class="k">otp_token</div><div class="v mono" id="kvOtp">-</div></div>
+      <div class="kv"><div class="k">access_token</div><div class="v mono" id="kvAccess">-</div></div>
+      <div class="kv"><div class="k">merchantId</div><div class="v mono" id="kvMerchant">-</div></div>
+      <div class="muted small">Tokens tersimpan di localStorage browser.</div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="top">
+      <div>
+        <div class="title">API Explorer</div>
+        <div class="sub">Request OTP → auto simpan otp_token → Verify cukup input OTP.</div>
+      </div>
+      <div class="topBtns">
+        <button class="btn" id="btnCopyCurl">Copy cURL</button>
+        <button class="btn" id="btnCopyReq">Copy Request</button>
+        <button class="btn ghost" id="btnCopyRes">Copy Response</button>
+      </div>
+    </header>
+
+    <section class="panelGrid">
+      <section class="panel">
+        <div class="panelHead">
+          <div class="hgroup">
+            <div class="hTitle" id="epTitle">POST /api/otp/request</div>
+            <div class="hDesc" id="epDesc">Request OTP dan simpan otp_token otomatis ke localStorage.</div>
+          </div>
+          <div class="badge">Live</div>
+        </div>
+
+        <div class="tabs">
+          <button class="tab active" data-tab="try">Try it</button>
+          <button class="tab" data-tab="json">JSON</button>
+          <button class="tab" data-tab="curl">cURL</button>
+        </div>
+
+        <div class="tabPane active" id="tab-try">
+          <div class="box">
+            <div class="boxTitle">Session Headers</div>
+            <div class="two">
+              <div class="field">
+                <div class="label">uniqueId</div>
+                <input id="s_uid" />
+              </div>
+              <div class="field">
+                <div class="label">User-Agent</div>
+                <input id="s_ua" />
+              </div>
+            </div>
+          </div>
+
+          <div class="box">
+            <div class="boxTitle">Parameters</div>
+            <div class="formGrid" id="params"></div>
+          </div>
+
+          <div class="actions">
+            <button class="btn primary" id="btnSend">Send</button>
+            <button class="btn ghost" id="btnAutofill">Autofill</button>
+          </div>
+
+          <div id="hint"></div>
+        </div>
+
+        <div class="tabPane" id="tab-json">
+          <div class="field">
+            <div class="labelRow">
+              <div class="label">Request JSON</div>
+              <div class="muted small">Bisa edit lalu Send.</div>
+            </div>
+            <textarea class="code" id="reqEditor" spellcheck="false"></textarea>
+          </div>
+          <div class="actions">
+            <button class="btn primary" id="btnSendJson">Send</button>
+            <button class="btn ghost" id="btnPrettify">Prettify</button>
+          </div>
+        </div>
+
+        <div class="tabPane" id="tab-curl">
+          <pre class="pre" id="curlBox"></pre>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panelHead">
+          <div class="hgroup">
+            <div class="hTitle">Response</div>
+            <div class="hDesc">Status + JSON (auto-save otp_token/access/merchantId bila ada).</div>
+          </div>
+          <div class="status" id="status">Idle</div>
+        </div>
+
+        <div class="respMeta">
+          <div class="metaItem"><div class="metaK">HTTP</div><div class="metaV mono" id="mHttp">-</div></div>
+          <div class="metaItem"><div class="metaK">Time</div><div class="metaV mono" id="mTime">-</div></div>
+          <div class="metaItem"><div class="metaK">Upstream</div><div class="metaV mono"><%= baseUrl %></div></div>
+        </div>
+
+        <pre class="pre" id="out">(no response)</pre>
+      </section>
+    </section>
+  </main>
+</div>
+
+<script>
+  const LS = {
+    session: "gobiz_session",
+    otp: "gobiz_otp_token",
+    access: "gobiz_access_token",
+    refresh: "gobiz_refresh_token",
+    merchant: "gobiz_merchant_id"
+  };
+
+  const $ = (id) => document.getElementById(id);
+  const qsa = (sel) => Array.from(document.querySelectorAll(sel));
+
+  const clamp = (s) => !s ? "-" : (s.length <= 14 ? s : (s.slice(0,4) + "…" + s.slice(-4)));
+  const pretty = (x) => { try { return JSON.stringify(x, null, 2); } catch { return String(x); } };
+
+  function loadSession() {
+    const s = JSON.parse(localStorage.getItem(LS.session) || "{}");
+    if (!s.uniqueId) s.uniqueId = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()));
+    if (!s.userAgent) s.userAgent = navigator.userAgent;
+    localStorage.setItem(LS.session, JSON.stringify(s));
+    return s;
+  }
+
+  function saveSession() {
+    const s = {
+      uniqueId: $("s_uid").value.trim() || (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())),
+      userAgent: $("s_ua").value.trim() || navigator.userAgent
+    };
+    localStorage.setItem(LS.session, JSON.stringify(s));
+    return s;
+  }
+
+  function getState() {
+    const s = loadSession();
+    return {
+      session: s,
+      otpToken: localStorage.getItem(LS.otp) || "",
+      access: localStorage.getItem(LS.access) || "",
+      refresh: localStorage.getItem(LS.refresh) || "",
+      merchantId: localStorage.getItem(LS.merchant) || ""
+    };
+  }
+
+  function renderKV() {
+    const st = getState();
+    $("kvUid").textContent = clamp(st.session.uniqueId);
+    $("kvOtp").textContent = st.otpToken ? clamp(st.otpToken) : "-";
+    $("kvAccess").textContent = st.access ? clamp(st.access) : "-";
+    $("kvMerchant").textContent = st.merchantId || "-";
+  }
+
+  async function postJSON(url, body) {
+    const t0 = performance.now();
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); } catch { data = text; }
+    return { ok: res.ok, status: res.status, data, ms: Math.round(performance.now() - t0) };
+  }
+
+  function setStatus(label, ok=null) {
+    const el = $("status");
+    el.textContent = label;
+    el.className = "status" + (ok === true ? " ok" : ok === false ? " bad" : "");
+  }
+
+  function setResp(r) {
+    $("mHttp").textContent = r?.status ?? "-";
+    $("mTime").textContent = r?.ms ? (r.ms + "ms") : "-";
+    $("out").textContent = pretty(r);
+  }
+
+  function buildCurl(url, body) {
+    const j = pretty(body).replaceAll("'", "\\'");
+    return [
+      `curl -X POST '${location.origin}${url}' \\`,
+      `  -H 'Content-Type: application/json' \\`,
+      `  -d '${j}'`
+    ].join("\\n");
+  }
+
+  function renderHint(msg, type="ok") {
+    $("hint").innerHTML = `<div class="callout ${type}"><b>${type === "ok" ? "Ready" : "Notice"}</b><div>${msg}</div></div>`;
+  }
+
+  const endpoints = {
+    otpRequest: {
+      title: "POST /api/otp/request",
+      desc: "Request OTP dan simpan otp_token otomatis ke localStorage.",
+      url: "/api/otp/request",
+      fields: [
+        { key: "phone", label: "Phone", ph: "812xxxx", hint: "tanpa +62" },
+        { key: "countryCode", label: "Country Code", ph: "62", def: "62" }
+      ],
+      build(values) { return { ...values, session: saveSession() }; },
+      after(resp) {
+        const otpToken = resp?.data?.data?.otp_token || resp?.data?.otp_token;
+        if (otpToken) localStorage.setItem(LS.otp, otpToken);
+      }
+    },
+    otpVerify: {
+      title: "POST /api/otp/verify",
+      desc: "Verify OTP. User cukup input OTP, otp_token otomatis dari localStorage.",
+      url: "/api/otp/verify",
+      fields: [{ key: "otp", label: "OTP", ph: "6 digit", hint: "kode dari SMS/WA" }],
+      build(values) {
+        const st = getState();
+        return { otp: values.otp, otpToken: st.otpToken, session: saveSession() };
+      },
+      after(resp) {
+        const access = resp?.data?.access_token;
+        const refresh = resp?.data?.refresh_token;
+        if (access) localStorage.setItem(LS.access, access);
+        if (refresh) localStorage.setItem(LS.refresh, refresh);
+      }
+    },
+    merchant: {
+      title: "POST /api/merchant/search",
+      desc: "Ambil merchant id & name (butuh access_token).",
+      url: "/api/merchant/search",
+      fields: [],
+      build() { const st = getState(); return { bearer: st.access, session: saveSession() }; },
+      after(resp) {
+        const hit = resp?.data?.hits?.[0];
+        if (hit?.id) localStorage.setItem(LS.merchant, hit.id);
+      }
+    },
+    mutasi: {
+      title: "POST /api/mutasi",
+      desc: "Ambil mutasi per tanggal (butuh access_token + merchantId).",
+      url: "/api/mutasi",
+      fields: [
+        { key: "dateYmd", label: "Date (YYYY-MM-DD)", ph: "2026-02-15", hint: "Asia/Jakarta" },
+        { key: "size", label: "Size", ph: "50", def: "50" }
+      ],
+      build(values) {
+        const st = getState();
+        return { bearer: st.access, merchantId: st.merchantId, dateYmd: values.dateYmd, size: Number(values.size || 50), session: saveSession() };
+      }
+    },
+    proxy: {
+      title: "POST /api/proxy",
+      desc: "Advanced: raw proxy untuk endpoint allowlist.",
+      url: "/api/proxy",
+      fields: [],
+      build() {
+        const st = getState();
+        return { endpoint: "/v1/merchants/search", method: "POST", body: { from:0,to:1,_source:["id","name"] }, bearer: st.access, session: saveSession() };
+      }
+    }
+  };
+
+  let current = "otpRequest";
+
+  function escapeHtml(s){return String(s??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;");}
+
+  function buildReq(ep) {
+    const values = {};
+    for (const f of ep.fields) {
+      values[f.key] = (document.getElementById("p_" + f.key)?.value || "").trim() || (f.def || "");
+    }
+    return ep.build(values);
+  }
+
+  function renderEndpoint(key) {
+    current = key;
+    const ep = endpoints[key];
+
+    qsa(".navItem").forEach(b => b.classList.toggle("active", b.dataset.key === key));
+    $("epTitle").textContent = ep.title;
+    $("epDesc").textContent = ep.desc;
+
+    const s = loadSession();
+    $("s_uid").value = s.uniqueId;
+    $("s_ua").value = s.userAgent;
+
+    const host = $("params");
+    host.innerHTML = "";
+    if (ep.fields.length === 0) host.innerHTML = `<div class="muted small">No parameters.</div>`;
+    else {
+      for (const f of ep.fields) {
+        host.insertAdjacentHTML("beforeend", `
+          <div class="field">
+            <div class="labelRow">
+              <div class="label">${escapeHtml(f.label)}</div>
+              <div class="muted small">${escapeHtml(f.hint || "")}</div>
+            </div>
+            <input id="p_${escapeHtml(f.key)}" placeholder="${escapeHtml(f.ph || "")}" value="${escapeHtml(f.def || "")}"/>
+          </div>
+        `);
+      }
+    }
+
+    const st = getState();
+    if (key === "otpVerify" && !st.otpToken) renderHint("Belum ada otp_token. Request OTP dulu.", "warn");
+    else if ((key === "merchant" || key === "mutasi") && !st.access) renderHint("Belum ada access_token. Verify OTP dulu.", "warn");
+    else if (key === "mutasi" && !st.merchantId) renderHint("Belum ada merchantId. Jalankan Merchant search dulu.", "warn");
+    else renderHint("Isi parameter lalu klik Send.", "ok");
+
+    const req = buildReq(ep);
+    $("reqEditor").value = pretty(req);
+    $("curlBox").textContent = buildCurl(ep.url, req);
+
+    renderKV();
+  }
+
+  async function send(useEditor=false) {
+    const ep = endpoints[current];
+    setStatus("Loading…");
+    $("out").textContent = "(loading…)";
+
+    let reqBody;
+    try { reqBody = useEditor ? JSON.parse($("reqEditor").value) : buildReq(ep); }
+    catch (e) { setStatus("Bad JSON", false); $("out").textContent = "Invalid JSON: " + e.message; return; }
+
+    $("reqEditor").value = pretty(reqBody);
+    $("curlBox").textContent = buildCurl(ep.url, reqBody);
+
+    const resp = await postJSON(ep.url, reqBody);
+    try { ep.after && ep.after(resp); } catch {}
+
+    renderKV();
+    setStatus(resp.ok ? "OK" : "Error", resp.ok);
+    setResp(resp);
+
+    // refresh hints
+    renderEndpoint(current);
+  }
+
+  function selectTab(name) {
+    qsa(".tab").forEach(t => t.classList.toggle("active", t.dataset.tab === name));
+    qsa(".tabPane").forEach(p => p.classList.toggle("active", p.id === "tab-" + name));
+  }
+  qsa(".tab").forEach(t => t.addEventListener("click", () => selectTab(t.dataset.tab)));
+  qsa(".navItem").forEach(b => b.addEventListener("click", () => renderEndpoint(b.dataset.key)));
+
+  $("btnSend").onclick = () => send(false);
+  $("btnSendJson").onclick = () => send(true);
+
+  $("btnPrettify").onclick = () => { try { $("reqEditor").value = pretty(JSON.parse($("reqEditor").value)); } catch {} };
+
+  $("btnAutofill").onclick = () => {
+    if (current === "mutasi") {
+      const d = new Date();
+      const y = d.getFullYear();
+      const m = String(d.getMonth()+1).padStart(2,"0");
+      const day = String(d.getDate()).padStart(2,"0");
+      const el = document.getElementById("p_dateYmd");
+      if (el) el.value = `${y}-${m}-${day}`;
+    }
+    renderEndpoint(current);
+  };
+
+  $("btnReset").onclick = () => {
+    Object.values(LS).forEach(k => localStorage.removeItem(k));
+    setStatus("Idle");
+    $("out").textContent = "(reset)";
+    renderEndpoint("otpRequest");
+  };
+
+  const copyText = (s) => navigator.clipboard.writeText(s);
+  $("btnCopyCurl").onclick = () => copyText($("curlBox").textContent);
+  $("btnCopyReq").onclick = () => copyText($("reqEditor").value);
+  $("btnCopyRes").onclick = () => copyText($("out").textContent);
+
+  selectTab("try");
+  renderEndpoint("otpRequest");
+</script>
+</body>
+</html>
